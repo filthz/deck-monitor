@@ -1,0 +1,11 @@
+{
+  "name": "taskmonitor-deck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stream-Deck-artige Statusübersicht für Claude Code und Qwen Code Sessions",
+  "scripts": {
+    "start": "node server.js",
+    "install-hooks": "python3 install-hooks.py",
+    "uninstall-hooks": "python3 install-hooks.py --uninstall"
+  }
+}

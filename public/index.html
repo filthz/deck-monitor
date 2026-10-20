@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Taskmonitor">
+<meta name="theme-color" content="#0b0c0f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Taskmonitor</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0c0f;
+    --chassis: #15171c;
+    --chassis-edge: #23262d;
+    --key: #1b1e24;
+    --key-hi: #262a32;
+    --lcd: #0e1014;
+    --text: #e9ebef;
+    --muted: #8b9099;
+    --faint: #555a63;
+
+    --waiting: #ff6a3d;
+    --error: #ff3d63;
+    --done: #34d57f;
+    --background: #a77bff;
+    --working: #4c9bff;
+    --idle: #8b9099;
+    --ended: #474b53;
+
+    --claude: #d97757;
+    --qwen: #7b6cff;
+
+    --radius: 18px;
+    --font: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(120% 80% at 50% -10%, #171a21 0%, var(--bg) 60%);
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    max-width: 1400px; margin: 0 auto 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .14em; font-size: 13px; color: var(--muted); }
+  .conn { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 3px #ffffff08; }
+  .conn.on { background: var(--done); box-shadow: 0 0 10px var(--done); }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 11px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    background: #ffffff08; border: 1px solid #ffffff10; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .chip.hot { color: var(--text); border-color: color-mix(in srgb, var(--c) 50%, transparent); background: color-mix(in srgb, var(--c) 14%, transparent); }
+  .tools { display: flex; gap: 8px; }
+  .tool {
+    appearance: none; border: 1px solid #ffffff12; background: #ffffff08; color: var(--muted);
+    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; cursor: pointer;
+  }
+  .tool.on { color: var(--text); background: #ffffff14; border-color: #ffffff26; }
+  .tool svg { width: 20px; height: 20px; }
+
+  /* ---------- deck ---------- */
+  .chassis {
+    max-width: 1400px; margin: 0 auto;
+    background: linear-gradient(180deg, var(--chassis-edge), var(--chassis) 8%, var(--chassis) 92%, #101216);
+    border-radius: 28px; padding: 18px;
+    box-shadow: 0 30px 60px -20px #000c, inset 0 1px 0 #ffffff0f, inset 0 0 0 1px #ffffff08;
+  }
+  .grid {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(clamp(132px, 16vw, 188px), 1fr));
+  }
+  .key {
+    --c: var(--idle);
+    position: relative; aspect-ratio: 1; border: 0; padding: 0; cursor: pointer;
+    border-radius: var(--radius); color: inherit; font: inherit; text-align: left;
+    background: linear-gradient(180deg, var(--key-hi), var(--key));
+    box-shadow: 0 6px 0 #08090b, 0 10px 18px -6px #000a, inset 0 1px 0 #ffffff12;
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .key:active { transform: translateY(4px); box-shadow: 0 2px 0 #08090b, 0 4px 10px -4px #000a, inset 0 1px 0 #ffffff12; }
+  .lcd {
+    position: absolute; inset: 6px; border-radius: calc(var(--radius) - 5px); overflow: hidden;
+    background: radial-gradient(120% 90% at 50% 30%, color-mix(in srgb, var(--c) 22%, var(--lcd)) 0%, var(--lcd) 70%);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 38%, transparent), inset 0 2px 8px #000a;
+    display: flex; flex-direction: column; padding: 10px 11px 0;
+  }
+  .top { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; }
+  .agent { padding: 2px 7px; border-radius: 6px; letter-spacing: .06em; color: #fff; background: var(--a); }
+  .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .glyph { flex: 1; display: grid; place-items: center; min-height: 0; }
+  .glyph svg { width: 38%; height: auto; max-height: 100%; color: var(--c); filter: drop-shadow(0 0 10px color-mix(in srgb, var(--c) 70%, transparent)); }
+  .name {
+    font-weight: 700; font-size: clamp(13px, 1.25vw, 16px); line-height: 1.15;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .detail {
+    font-size: 11px; color: var(--muted); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .label {
+    margin: 8px -11px 0; padding: 5px 11px; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: color-mix(in srgb, var(--c) 85%, white); background: color-mix(in srgb, var(--c) 18%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+  }
+
+  .key[data-status="waiting"] { --c: var(--waiting); }
+  .key[data-status="error"] { --c: var(--error); }
+  .key[data-status="done"] { --c: var(--done); }
+  .key[data-status="background"] { --c: var(--background); }
+  .key[data-status="working"] { --c: var(--working); }
+  .key[data-status="ended"] { --c: var(--ended); opacity: .55; }
+
+  .key[data-status="waiting"] .lcd { animation: alarm 1.4s ease-in-out infinite; }
+  .key[data-status="working"] .glyph svg { animation: spin 1.6s linear infinite; }
+  .key[data-status="background"] .glyph svg { animation: breathe 2.6s ease-in-out infinite; }
+  @keyframes alarm {
+    0%, 100% { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent), inset 0 2px 8px #000a; }
+    50% { box-shadow: inset 0 0 0 2px var(--c), inset 0 0 28px color-mix(in srgb, var(--c) 45%, transparent); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes breathe { 50% { opacity: .45; transform: scale(.92); } }
+  @media (prefers-reduced-motion: reduce) { .lcd, .glyph svg { animation: none !important; } }
+
+  .empty {
+    grid-column: 1 / -1; padding: 60px 20px; text-align: center; color: var(--muted); line-height: 1.6;
+  }
+  .empty code { background: #ffffff0d; padding: 2px 6px; border-radius: 6px; color: var(--text); }
+
+  /* ---------- detail sheet ---------- */
+  .scrim { position: fixed; inset: 0; background: #000a; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: none; align-items: flex-end; justify-content: center; z-index: 10; }
+  .scrim.open { display: flex; }
+  .sheet {
+    --c: var(--idle);
+    width: min(640px, 100%); max-height: 85vh; overflow: auto;
+    background: var(--chassis); border-radius: 24px 24px 0 0; padding: 22px 22px max(22px, env(safe-area-inset-bottom));
+    box-shadow: 0 -1px 0 color-mix(in srgb, var(--c) 60%, transparent), 0 -20px 50px #000a;
+    user-select: text; -webkit-user-select: text;
+  }
+  @media (min-width: 700px) { .scrim { align-items: center; } .sheet { border-radius: 24px; } }
+  .sheet h2 { margin: 0 0 4px; font-size: 22px; }
+  .sheet .status { color: var(--c); font-weight: 700; font-size: 14px; margin-bottom: 16px; }
+  .rows { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 14px; }
+  .rows dt { color: var(--muted); }
+  .rows dd { margin: 0; overflow-wrap: anywhere; }
+  .prompt { margin-top: 16px; padding: 12px 14px; background: #0004; border-radius: 12px; font-size: 14px; line-height: 1.5; color: #cfd3da; white-space: pre-wrap; }
+  .subtitle { color: var(--muted); font-size: 14px; margin: -2px 0 6px; }
+  .section { margin-top: 16px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .screen {
+    margin: 8px 0 0; padding: 12px 14px; background: #05060a; border-radius: 12px; border: 1px solid #ffffff10;
+    font: 11.5px/1.45 ui-monospace, "SF Mono", Menlo, monospace; color: #c9ced6;
+    white-space: pre; overflow: auto; max-height: 38vh;
+  }
+  .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  .btn { appearance: none; border: 1px solid #ffffff18; background: #ffffff0c; color: var(--text); font: inherit; font-weight: 600; padding: 12px 18px; border-radius: 12px; cursor: pointer; flex: 1; min-width: 120px; }
+  .btn.primary { background: color-mix(in srgb, var(--c) 30%, transparent); border-color: color-mix(in srgb, var(--c) 60%, transparent); }
+  .btn.danger { color: #ff8b9f; }
+  #sheetActions {
+    position: sticky; bottom: calc(-1 * max(22px, env(safe-area-inset-bottom))); z-index: 1;
+    margin: 16px -22px 0; padding: 14px 22px max(22px, env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, transparent, var(--chassis) 14px);
+  }
+  .btn.armed { background: var(--error); border-color: var(--error); color: #fff; }
+  .keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 8px; }
+  .kbtn {
+    appearance: none; border: 1px solid #ffffff18; color: var(--text); font: inherit; font-weight: 700; font-size: 15px;
+    padding: 12px 4px; border-radius: 12px; cursor: pointer;
+    background: linear-gradient(180deg, var(--key-hi), var(--key)); box-shadow: 0 3px 0 #08090b;
+  }
+  .kbtn:active { transform: translateY(2px); box-shadow: 0 1px 0 #08090b; }
+  .kbtn.danger { color: #ff8b9f; }
+  .kbtn.armed { background: var(--error); color: #fff; border-color: var(--error); }
+  @media (max-width: 480px) { .keys { grid-template-columns: repeat(3, 1fr); } }
+  .reply { display: flex; gap: 8px; margin-top: 10px; align-items: stretch; }
+  .reply textarea {
+    flex: 1; min-height: 46px; max-height: 30vh; resize: vertical; padding: 12px 14px; border-radius: 12px;
+    background: #05060a; color: var(--text); border: 1px solid #ffffff1a; font: 15px/1.4 var(--font);
+  }
+  .reply textarea:focus { outline: none; border-color: color-mix(in srgb, var(--c) 70%, transparent); }
+  .reply .btn { flex: 0 0 auto; min-width: 96px; }
+  .send-status { min-height: 18px; margin-top: 6px; font-size: 13px; color: var(--muted); }
+  .send-status.ok { color: var(--done); }
+  .send-status.err { color: var(--error); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="conn" id="conn" title="Verbindung"></span>TASKMONITOR</div>
+  <div class="chips" id="chips"></div>
+  <div class="tools">
+    <button class="tool" id="soundBtn" title="Ton bei Statuswechsel" aria-label="Ton">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>
+    </button>
+    <button class="tool" id="wakeBtn" title="Bildschirm wach halten" aria-label="Wach halten">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="chassis"><div class="grid" id="grid"></div></main>
+
+<div class="scrim" id="scrim">
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true">
+    <div id="sheetInfo"></div>
+    <div id="orcaPart" hidden>
+      <div class="section">Bildschirm</div>
+      <pre class="screen" id="screen"></pre>
+      <div class="section">Antworten</div>
+      <div class="keys">
+        <button class="kbtn" data-key="1">1</button>
+        <button class="kbtn" data-key="2">2</button>
+        <button class="kbtn" data-key="3">3</button>
+        <button class="kbtn" data-key="enter">⏎</button>
+        <button class="kbtn" data-key="esc">Esc</button>
+        <button class="kbtn danger" data-key="interrupt">Ctrl+C</button>
+      </div>
+      <form class="reply" id="replyForm">
+        <textarea id="replyText" rows="2" placeholder="Nachricht an die Session …" autocapitalize="sentences"></textarea>
+        <button class="btn primary" type="submit">Senden</button>
+      </form>
+      <div class="send-status" id="sendStatus"></div>
+    </div>
+    <div class="actions" id="sheetActions"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const STATUS = {
+  waiting:    { label: 'Wartet',      rank: 0 },
+  error:      { label: 'Fehler',      rank: 1 },
+  done:       { label: 'Fertig',      rank: 2 },
+  background: { label: 'Hintergrund', rank: 3 },
+  working:    { label: 'Arbeitet',    rank: 4 },
+  idle:       { label: 'Bereit',      rank: 5 },
+  ended:      { label: 'Beendet',     rank: 6 },
+};
+
+const ICON = {
+  waiting: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
+  error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.3 3.9-8.1 14A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.7-3.1l-8.1-14a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>',
+  background: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1a10 10 0 0 1 0-14.2"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4"/><path d="M19.1 4.9a10 10 0 0 1 0 14.2"/></svg>',
+  working: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg>',
+  idle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>',
+  ended: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>',
+};
+
+const AGENT = {
+  claude: { label: 'CLAUDE', color: 'var(--claude)' },
+  qwen:   { label: 'QWEN',   color: 'var(--qwen)' },
+};
+
+const sessions = new Map();
+let clockOffset = 0;
+let openId = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function store(key, value) {
+  try { if (value === undefined) return localStorage.getItem(key); localStorage.setItem(key, value); } catch { return null; }
+}
+
+function elapsed(since) {
+  const s = Math.max(0, Math.floor((Date.now() + clockOffset - since) / 1000));
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h ${m % 60}m` : `${Math.floor(h / 24)}d`;
+}
+
+function terminalLabel(t) {
+  if (!t) return '–';
+  if (t.orcaPane) return 'Orca' + (t.orcaTab ? ` (Tab ${t.orcaTab})` : '');
+  if ((t.emulator || '').includes('JetBrains')) return 'IntelliJ Terminal';
+  return t.program || t.emulator || '–';
+}
+
+function sorted() {
+  return [...sessions.values()].sort((a, b) =>
+    (STATUS[a.status]?.rank ?? 9) - (STATUS[b.status]?.rank ?? 9) || a.since - b.since);
+}
+
+function render() {
+  const list = sorted();
+  const grid = $('grid');
+  if (!list.length) {
+    grid.innerHTML = '<div class="empty">Keine Sessions.<br>Starte <code>claude</code> oder <code>qwen</code> – Kacheln erscheinen automatisch.</div>';
+  } else {
+    grid.innerHTML = list.map((s) => {
+      const st = STATUS[s.status] || STATUS.idle;
+      const ag = AGENT[s.source] || { label: (s.source || '?').toUpperCase(), color: 'var(--faint)' };
+      return `<button class="key" data-id="${esc(s.id)}" data-status="${esc(s.status)}">
+        <div class="lcd">
+          <div class="top"><span class="agent" style="--a:${ag.color}">${esc(ag.label)}</span><span class="time" data-since="${s.since}">${elapsed(s.since)}</span></div>
+          <div class="glyph">${ICON[s.status] || ICON.idle}</div>
+          <div class="name">${esc(s.project)}</div>
+          <div class="detail">${esc(s.task || s.detail || s.prompt)}</div>
+          <div class="label">${st.label}</div>
+        </div>
+      </button>`;
+    }).join('');
+  }
+  renderChips(list);
+  const waiting = list.filter((s) => s.status === 'waiting').length;
+  document.title = waiting ? `(${waiting}) Taskmonitor` : 'Taskmonitor';
+  if (openId) renderSheet();
+}
+
+function renderChips(list) {
+  const counts = {};
+  for (const s of list) counts[s.status] = (counts[s.status] || 0) + 1;
+  $('chips').innerHTML = ['waiting', 'done', 'background', 'working', 'error']
+    .filter((k) => counts[k] || k === 'waiting')
+    .map((k) => `<span class="chip ${counts[k] ? 'hot' : ''}" style="--c:var(--${k})"><i></i>${counts[k] || 0} ${STATUS[k].label}</span>`)
+    .join('');
+}
+
+function tick() {
+  for (const el of document.querySelectorAll('[data-since]')) el.textContent = elapsed(Number(el.dataset.since));
+}
+
+// ---------- detail sheet ----------
+// Only the info and action parts are re-rendered on updates; screen and reply input stay untouched.
+function renderSheet() {
+  const s = sessions.get(openId);
+  if (!s) { closeSheet(); return; }
+  $('sheet').style.setProperty('--c', `var(--${s.status})`);
+  const canAck = (s.via === 'orca' ? ['done', 'error'] : ['done', 'error', 'background']).includes(s.status);
+  $('sheetInfo').innerHTML = `
+    <h2>${esc(s.project)}</h2>
+    ${s.task ? `<div class="subtitle">${esc(s.task)}</div>` : ''}
+    <div class="status">${esc(STATUS[s.status]?.label || s.status)} · seit <span data-since="${s.since}">${elapsed(s.since)}</span></div>
+    <dl class="rows">
+      <dt>Agent</dt><dd>${esc(AGENT[s.source]?.label || s.source)}</dd>
+      ${s.detail ? `<dt>Aktuell</dt><dd>${esc(s.detail)}</dd>` : ''}
+      ${s.branch ? `<dt>Branch</dt><dd>${esc(s.branch)}</dd>` : ''}
+      <dt>Pfad</dt><dd>${esc(s.cwd || '–')}</dd>
+      <dt>Terminal</dt><dd>${esc(terminalLabel(s.term))}</dd>
+      ${s.pid ? `<dt>PID</dt><dd>${esc(s.pid)}</dd>` : ''}
+    </dl>
+    ${s.prompt ? `<div class="section">Prompt</div><div class="prompt">${esc(s.prompt)}</div>` : ''}`;
+  $('orcaPart').hidden = !s.orcaPane;
+  const actions = `
+    ${s.orcaPane ? '<button class="btn" data-act="focus">In Orca öffnen</button>' : ''}
+    ${canAck ? '<button class="btn primary" data-act="ack">Quittieren</button>' : ''}
+    ${s.orcaPane
+      ? '<button class="btn danger" data-act="terminate">Session schließen</button>'
+      : '<button class="btn danger" data-act="remove">Ausblenden</button>'}
+    <button class="btn" data-act="close">Zurück</button>`;
+  // Keep the buttons (and a pending confirmation) unless they actually change.
+  if (actions !== lastActions || !$('sheetActions').firstElementChild) {
+    $('sheetActions').innerHTML = actions;
+    lastActions = actions;
+  }
+}
+
+function api(action, body) {
+  const opts = body === undefined
+    ? { method: action === 'screen' ? 'GET' : 'POST' }
+    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  return fetch(`api/sessions/${encodeURIComponent(openId)}/${action}`, opts).then(async (r) => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    return data;
+  });
+}
+
+// ---------- live screen preview (Orca) ----------
+let screenTimer = null;
+async function loadScreen() {
+  const id = openId;
+  const s = id && sessions.get(id);
+  if (!s || !s.orcaPane) return;
+  let text;
+  try { text = (await api('screen')).lines.join('\n'); } catch (e) { text = `Vorschau nicht verfügbar (${e.message})`; }
+  if (openId !== id) return;
+  const pre = $('screen');
+  const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+  pre.textContent = text;
+  if (atBottom) pre.scrollTop = pre.scrollHeight;
+}
+
+let lastActions = null;
+function openSheet(id) {
+  openId = id;
+  lastActions = null;
+  $('screen').textContent = 'Lade …';
+  $('replyText').value = '';
+  setSendStatus('');
+  renderSheet();
+  $('scrim').classList.add('open');
+  $('screen').scrollTop = $('screen').scrollHeight;
+  loadScreen();
+  clearInterval(screenTimer);
+  screenTimer = setInterval(loadScreen, 2000);
+}
+function closeSheet() { openId = null; clearInterval(screenTimer); $('scrim').classList.remove('open'); }
+
+// ---------- replies (Orca) ----------
+function setSendStatus(text, kind) {
+  const el = $('sendStatus');
+  el.textContent = text;
+  el.className = 'send-status' + (kind ? ' ' + kind : '');
+}
+
+async function send(payload, label) {
+  setSendStatus('Sende …');
+  try {
+    await api('send', payload);
+    setSendStatus(`${label} gesendet ✓`, 'ok');
+    setTimeout(loadScreen, 400);
+    setTimeout(loadScreen, 1500);
+    return true;
+  } catch (e) {
+    setSendStatus(`Fehler: ${e.message}`, 'err');
+    return false;
+  }
+}
+
+let armTimer = null;
+document.querySelector('.keys').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-key]');
+  if (!btn) return;
+  const key = btn.dataset.key;
+  if (key === 'interrupt' && !btn.classList.contains('armed')) {
+    // Ctrl+C aborts the agent's turn, so it needs a second tap.
+    btn.classList.add('armed');
+    btn.textContent = 'Sicher?';
+    clearTimeout(armTimer);
+    armTimer = setTimeout(() => { btn.classList.remove('armed'); btn.textContent = 'Ctrl+C'; }, 3000);
+    return;
+  }
+  if (key === 'interrupt') { clearTimeout(armTimer); btn.classList.remove('armed'); btn.textContent = 'Ctrl+C'; }
+  send({ key }, key === 'interrupt' ? 'Ctrl+C' : key === 'enter' ? 'Enter' : key === 'esc' ? 'Esc' : `„${key}“`);
+});
+
+$('replyForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('replyText').value;
+  if (!text.trim()) return;
+  if (await send({ text }, 'Nachricht')) $('replyText').value = '';
+});
+$('replyText').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $('replyForm').requestSubmit(); }
+});
+
+$('grid').addEventListener('click', (e) => {
+  const key = e.target.closest('.key');
+  if (key) openSheet(key.dataset.id);
+});
+$('scrim').addEventListener('click', (e) => { if (e.target === $('scrim')) closeSheet(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.tagName !== 'TEXTAREA') closeSheet(); });
+$('sheetActions').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const act = btn.dataset.act;
+  if (act === 'close') { closeSheet(); return; }
+  if (act === 'terminate') {
+    // Closing the Orca terminal ends the agent process, so it needs a second tap.
+    if (!btn.classList.contains('armed')) {
+      btn.classList.add('armed');
+      btn.textContent = 'Wirklich schließen?';
+      setTimeout(() => { if (btn.isConnected) { btn.classList.remove('armed'); btn.textContent = 'Session schließen'; } }, 3000);
+      return;
+    }
+    btn.textContent = 'Schließe …';
+    try {
+      await api('close');
+      closeSheet();
+    } catch (err) {
+      btn.classList.remove('armed');
+      btn.textContent = 'Fehlgeschlagen';
+      setSendStatus(`Schließen fehlgeschlagen: ${err.message}`, 'err');
+    }
+    return;
+  }
+  if (act === 'focus') {
+    btn.textContent = 'Öffne …';
+    const ok = await api('focus').then(() => true, () => false);
+    btn.textContent = ok ? 'In Orca geöffnet ✓' : 'Fehlgeschlagen';
+    setTimeout(() => { if (btn.isConnected) btn.textContent = 'In Orca öffnen'; }, 2000);
+    return;
+  }
+  await api(act).catch(() => {});
+  closeSheet();
+});
+
+// ---------- sound ----------
+let soundOn = store('tm.sound') === '1';
+let audio = null;
+function updateSoundBtn() { $('soundBtn').classList.toggle('on', soundOn); }
+$('soundBtn').addEventListener('click', () => {
+  soundOn = !soundOn;
+  store('tm.sound', soundOn ? '1' : '0');
+  updateSoundBtn();
+  if (soundOn) beep([660]);
+});
+function beep(freqs) {
+  if (!soundOn) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+    freqs.forEach((f, i) => {
+      const t = audio.currentTime + i * 0.16;
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      o.connect(g).connect(audio.destination);
+      o.start(t); o.stop(t + 0.15);
+    });
+  } catch {}
+}
+updateSoundBtn();
+
+// ---------- wake lock ----------
+let wakeLock = null;
+let wakeWanted = store('tm.wake') === '1';
+$('wakeBtn').hidden = !('wakeLock' in navigator);
+async function applyWake() {
+  $('wakeBtn').classList.toggle('on', wakeWanted);
+  try {
+    if (wakeWanted && !wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!wakeWanted && wakeLock) {
+      await wakeLock.release();
+    }
+  } catch {}
+}
+$('wakeBtn').addEventListener('click', () => { wakeWanted = !wakeWanted; store('tm.wake', wakeWanted ? '1' : '0'); applyWake(); });
+document.addEventListener('visibilitychange', applyWake);
+applyWake();
+
+// ---------- live stream ----------
+function connect() {
+  const es = new EventSource('events');
+  es.onopen = () => $('conn').classList.add('on');
+  es.onerror = () => $('conn').classList.remove('on');
+  es.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'snapshot') {
+      clockOffset = msg.now - Date.now();
+      sessions.clear();
+      for (const s of msg.sessions) sessions.set(s.id, s);
+    } else if (msg.type === 'upsert') {
+      const prev = sessions.get(msg.session.id);
+      if (prev && prev.status !== msg.session.status) {
+        if (msg.session.status === 'waiting') beep([880, 660]);
+        else if (msg.session.status === 'done') beep([523, 784]);
+        else if (msg.session.status === 'error') beep([330, 220]);
+      }
+      sessions.set(msg.session.id, msg.session);
+    } else if (msg.type === 'remove') {
+      sessions.delete(msg.id);
+    }
+    render();
+  };
+}
+
+render();
+connect();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
